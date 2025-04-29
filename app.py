@@ -1,5 +1,6 @@
+
 import streamlit as st
-import openai
+from openai import OpenAI
 from PIL import Image
 from io import BytesIO
 import base64
@@ -12,33 +13,47 @@ st.title("📸 UGC Scout (AI-powered)")
 
 st.markdown("Upload user-generated content (UGC) images and evaluate how well they match your brand aesthetic using GPT-4 Vision.")
 
-openai.api_key = st.secrets.get("OPENAI_API_KEY", "your-openai-key-here")
+# API Key check
+if "OPENAI_API_KEY" not in st.secrets:
+    st.error("🚨 OPENAI_API_KEY not found in Streamlit secrets. Please set it in your Streamlit Cloud settings.")
+    st.stop()
+
+# New OpenAI Client
+client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY"))
 
 # --------------------------
 # HELPER FUNCTION
 # --------------------------
 def analyze_image_with_gpt(image: Image.Image, brand_prompt: str) -> str:
-    # Convert image to base64
     buffered = BytesIO()
     image.save(buffered, format="JPEG")
     img_b64 = base64.b64encode(buffered.getvalue()).decode()
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4-vision-preview",
             messages=[
                 {"role": "system", "content": "You are a creative brand stylist helping a D2C skincare brand evaluate user-generated content."},
-                {"role": "user", "content": [
-                    {"type": "text", "text": f"""Please evaluate the attached image. 
-Does it match this brand tone: \"{brand_prompt}\"?
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"""Please evaluate the attached image. 
+Does it match this brand tone: '{brand_prompt}'?
 Give a score out of 10 and a brief reason. Mention what works, what doesn’t, and what can be improved.
-Also classify the image as one of the following types: 'ad-worthy', 'testimonial', 'flatlay', 'lifestyle', or 'uncategorized'."""},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                ]}
+Also classify the image as one of the following types: 'ad-worthy', 'testimonial', 'flatlay', 'lifestyle', or 'uncategorized'."""
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}
+                        }
+                    ]
+                }
             ],
             max_tokens=500
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
     except Exception as e:
         return f"❌ Error analyzing image: {e}"
 
